@@ -28,6 +28,17 @@ namespace EmployeeManager
         /// </summary>
         public static MainWindow Instance { get; } = new MainWindow();
 
+        /// <summary>
+        ///     Gets a value that indicates whether the current record can be deleted.
+        /// </summary>
+        public bool CanDelete =>
+            CurrentEmployee?.EmployeeType != null ||
+            employeeDataGridView.Rows.Count > 1;
+
+        /// <summary>
+        ///     Gets or sets the text displayed on the 'X row(s) affected' indicator on the
+        ///     Status Bar.
+        /// </summary>
         public string RowsAffectedReport
         {
             get => rowsAffectedLabel.Text;
@@ -145,14 +156,22 @@ namespace EmployeeManager
         ///     to delete the current employee, or <c>false</c> to indicate the user has
         ///     changed their mind.
         /// </returns>
-        private bool CanDeleteEmployee() =>
-            MessageBox.Show(
+        private bool CanDeleteEmployee()
+        {
+            if (!CanDelete) return false;
+
+            return MessageBox.Show(
                 this,
                 string.Format(
-                    Resources.Confirm_DeleteEmployee, CurrentEmployeeFullName
+                    CurrentEmployee == null ||
+                    string.IsNullOrWhiteSpace(CurrentEmployeeFullName)
+                        ? Resources.Confirm_DeleteEmployeeWithEmptyName
+                        : Resources.Confirm_DeleteEmployeeWithNameKnown,
+                    CurrentEmployeeFullName
                 ), Application.ProductName, MessageBoxButtons.YesNo,
                 MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button2
             ) == DialogResult.Yes;
+        }
 
         /// <summary>
         ///     Deletes the currently-selected Employee record from the data source.
@@ -163,6 +182,9 @@ namespace EmployeeManager
         /// </remarks>
         private void DeleteEmployee()
         {
+            // Stop if the current row does not allow deleting
+            if (!CanDelete) return;
+
             // End the current editing operation, if any
             employeeBindingSource.EndEdit();
 
@@ -220,7 +242,11 @@ namespace EmployeeManager
             // If the data is dirty, then enable the Save button and menu item.
             // Otherwise, grey them out to show the user there are no pending
             // changes to be saved.
-            employeeBindingNavigatorSaveItem.Enabled = IsDirty;
+            saveButton.Enabled = IsDirty;
+
+            // Grey out the Delete button unless there's actually something that
+            // can be deleted
+            deleteButton.Enabled = CanDelete;
         }
 
         /// <summary>
@@ -275,6 +301,26 @@ namespace EmployeeManager
         }
 
         /// <summary>
+        ///     Called when the user clicks the Employee menu and it's just about to drop
+        ///     down.
+        /// </summary>
+        /// <param name="sender">
+        ///     Reference to the instance of the object that raised the
+        ///     event.
+        /// </param>
+        /// <param name="e">
+        ///     A <see cref="T:System.EventArgs" /> that contains the event
+        ///     data.
+        /// </param>
+        /// <remarks>
+        ///     We take a moment here to check if menu items need to be greyed out or
+        ///     ungreyed.
+        /// </remarks>
+        private void
+            OnEmployeeMenuDropDownOpening(object sender, EventArgs e) =>
+            employeeDelete.Enabled = CanDelete;
+
+        /// <summary>
         ///     Called when the user chooses the Exit command on the File menu.
         /// </summary>
         /// <param name="sender">
@@ -321,7 +367,7 @@ namespace EmployeeManager
         ///     data.
         /// </param>
         private void OnFileNew(object sender, EventArgs e) =>
-            bindingNavigatorAddNewItem.PerformClick();
+            addButton.PerformClick();
 
         /// <summary>
         ///     Called when the user chooses the Save command on the File menu.

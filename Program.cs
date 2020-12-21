@@ -18,6 +18,8 @@ namespace EmployeeManager
         [STAThread]
         public static void Main()
         {
+            ConfigureDatabaseFileLocation();
+
             Application.SetUnhandledExceptionMode(
                 UnhandledExceptionMode.CatchException
             );
@@ -64,6 +66,35 @@ namespace EmployeeManager
                     $"Exception details: {exception.Message}\r\n\t{exception.StackTrace}"
                 }
             );
+        }
+
+        private static void ConfigureDatabaseFileLocation()
+        {
+            // ASSUMING that our deploy_db.bat script copies our .mdf and .ldf files
+            // to %LOCALAPPDATA%\xyLOGIX, LLC, we need to switch the data directory in
+            // the app.config to be there
+            var appDataDir = Environment
+                .ExpandEnvironmentVariables(@"%LOCALAPPDATA%\xyLOGIX, LLC")
+                .ToUpperInvariant();
+
+            /* obviously, File I/O here should be done inside a try/catch, but
+             we are going to, for expediency, make the naive assumption here that
+            our I/O will work just fine. */
+
+            if (!Directory.Exists(appDataDir))
+                Directory.CreateDirectory(appDataDir);
+
+            var appInstallationDir =
+                Path.GetDirectoryName(Application.ExecutablePath);
+            if (appInstallationDir == null)
+                return;
+
+            new FileInfo(Path.Combine(appInstallationDir, "Employees.mdf"))
+                .CopyTo(Path.Combine(appDataDir, "Employees.mdf"), true);
+            new FileInfo(Path.Combine(appInstallationDir, "Employees_log.ldf"))
+                .CopyTo(Path.Combine(appDataDir, "Employees_log.ldf"), true);
+
+            AppDomain.CurrentDomain.SetData("DataDirectory", appDataDir);
         }
 
         /// <summary>

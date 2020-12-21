@@ -183,6 +183,9 @@
       <LastGenOutput>Employees.Designer.cs</LastGenOutput>
       <CustomToolNamespace>EmployeeManager.Data</CustomToolNamespace>
     </EntityDeploy>
+    <None Include="deploy_db.bat">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
     <None Include="Properties\DataSources\EmployeeManager.Data.Employee.datasource" />
     <None Include="Properties\DataSources\EmployeeManager.Data.EmployeeType.datasource" />
@@ -196,6 +199,9 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <None Include="README.md" />
+    <None Include="SqlLocalDB.msi">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

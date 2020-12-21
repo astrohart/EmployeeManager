@@ -33,6 +33,7 @@ namespace EmployeeManager
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainWindow));
             this.employeeBindingNavigator = new System.Windows.Forms.BindingNavigator(this.components);
             this.bindingNavigatorAddNewItem = new System.Windows.Forms.ToolStripButton();
+            this.employeeBindingSource = new System.Windows.Forms.BindingSource(this.components);
             this.bindingNavigatorCountItem = new System.Windows.Forms.ToolStripLabel();
             this.bindingNavigatorDeleteItem = new System.Windows.Forms.ToolStripButton();
             this.bindingNavigatorMoveFirstItem = new System.Windows.Forms.ToolStripButton();
@@ -45,29 +46,28 @@ namespace EmployeeManager
             this.bindingNavigatorSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.employeeBindingNavigatorSaveItem = new System.Windows.Forms.ToolStripButton();
             this.employeeDataGridView = new System.Windows.Forms.DataGridView();
-            this.menuStrip1 = new System.Windows.Forms.MenuStrip();
-            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.fileSave = new System.Windows.Forms.ToolStripMenuItem();
-            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
-            this.fileExit = new System.Windows.Forms.ToolStripMenuItem();
-            this.statusStrip1 = new System.Windows.Forms.StatusStrip();
-            this.messageLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.rowsAffectedLabel = new System.Windows.Forms.ToolStripStatusLabel();
-            this.dataToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.employeeDelete = new System.Windows.Forms.ToolStripMenuItem();
-            this.fileNew = new System.Windows.Forms.ToolStripMenuItem();
             this.dataGridViewTextBoxColumn2 = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.dataGridViewTextBoxColumn3 = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.dataGridViewTextBoxColumn5 = new System.Windows.Forms.DataGridViewComboBoxColumn();
             this.employeeTypeBindingSource = new System.Windows.Forms.BindingSource(this.components);
-            this.employeeBindingSource = new System.Windows.Forms.BindingSource(this.components);
+            this.menuStrip1 = new System.Windows.Forms.MenuStrip();
+            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.fileNew = new System.Windows.Forms.ToolStripMenuItem();
+            this.fileSave = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.fileExit = new System.Windows.Forms.ToolStripMenuItem();
+            this.dataToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.employeeDelete = new System.Windows.Forms.ToolStripMenuItem();
+            this.statusStrip1 = new System.Windows.Forms.StatusStrip();
+            this.messageLabel = new System.Windows.Forms.ToolStripStatusLabel();
+            this.rowsAffectedLabel = new System.Windows.Forms.ToolStripStatusLabel();
             ((System.ComponentModel.ISupportInitialize)(this.employeeBindingNavigator)).BeginInit();
             this.employeeBindingNavigator.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.employeeBindingSource)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.employeeDataGridView)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.employeeTypeBindingSource)).BeginInit();
             this.menuStrip1.SuspendLayout();
             this.statusStrip1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.employeeTypeBindingSource)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.employeeBindingSource)).BeginInit();
             this.SuspendLayout();
             // 
             // employeeBindingNavigator
@@ -75,7 +75,7 @@ namespace EmployeeManager
             this.employeeBindingNavigator.AddNewItem = this.bindingNavigatorAddNewItem;
             this.employeeBindingNavigator.BindingSource = this.employeeBindingSource;
             this.employeeBindingNavigator.CountItem = this.bindingNavigatorCountItem;
-            this.employeeBindingNavigator.DeleteItem = this.bindingNavigatorDeleteItem;
+            this.employeeBindingNavigator.DeleteItem = null;
             this.employeeBindingNavigator.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.bindingNavigatorMoveFirstItem,
             this.bindingNavigatorMovePreviousItem,
@@ -110,6 +110,10 @@ namespace EmployeeManager
             this.bindingNavigatorAddNewItem.Text = "&Add New Employee";
             this.bindingNavigatorAddNewItem.ToolTipText = "Add New Employee (Ctrl + N)";
             // 
+            // employeeBindingSource
+            // 
+            this.employeeBindingSource.DataSource = typeof(EmployeeManager.Data.Employee);
+            // 
             // bindingNavigatorCountItem
             // 
             this.bindingNavigatorCountItem.Name = "bindingNavigatorCountItem";
@@ -126,6 +130,7 @@ namespace EmployeeManager
             this.bindingNavigatorDeleteItem.Size = new System.Drawing.Size(23, 22);
             this.bindingNavigatorDeleteItem.Text = "&Delete";
             this.bindingNavigatorDeleteItem.ToolTipText = "Delete (Del)";
+            this.bindingNavigatorDeleteItem.Click += new System.EventHandler(this.OnEmployeeDelete);
             // 
             // bindingNavigatorMoveFirstItem
             // 
@@ -216,6 +221,34 @@ namespace EmployeeManager
             this.employeeDataGridView.DataError += new System.Windows.Forms.DataGridViewDataErrorEventHandler(this.OnDataError);
             this.employeeDataGridView.UserDeletingRow += new System.Windows.Forms.DataGridViewRowCancelEventHandler(this.OnUserDeletingRow);
             // 
+            // dataGridViewTextBoxColumn2
+            // 
+            this.dataGridViewTextBoxColumn2.DataPropertyName = "FirstName";
+            this.dataGridViewTextBoxColumn2.HeaderText = "First Name";
+            this.dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
+            // 
+            // dataGridViewTextBoxColumn3
+            // 
+            this.dataGridViewTextBoxColumn3.DataPropertyName = "LastName";
+            this.dataGridViewTextBoxColumn3.HeaderText = "Last Name";
+            this.dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
+            // 
+            // dataGridViewTextBoxColumn5
+            // 
+            this.dataGridViewTextBoxColumn5.DataPropertyName = "EmployeeTypeId";
+            this.dataGridViewTextBoxColumn5.DataSource = this.employeeTypeBindingSource;
+            this.dataGridViewTextBoxColumn5.DisplayMember = "EmployeeTypeName";
+            this.dataGridViewTextBoxColumn5.DisplayStyle = System.Windows.Forms.DataGridViewComboBoxDisplayStyle.ComboBox;
+            this.dataGridViewTextBoxColumn5.HeaderText = "Employee Type";
+            this.dataGridViewTextBoxColumn5.Name = "dataGridViewTextBoxColumn5";
+            this.dataGridViewTextBoxColumn5.Resizable = System.Windows.Forms.DataGridViewTriState.True;
+            this.dataGridViewTextBoxColumn5.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Automatic;
+            this.dataGridViewTextBoxColumn5.ValueMember = "EmployeeTypeID";
+            // 
+            // employeeTypeBindingSource
+            // 
+            this.employeeTypeBindingSource.DataSource = typeof(EmployeeManager.Data.EmployeeType);
+            // 
             // menuStrip1
             // 
             this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
@@ -239,6 +272,16 @@ namespace EmployeeManager
             this.fileToolStripMenuItem.Text = "&File";
             this.fileToolStripMenuItem.DropDownOpening += new System.EventHandler(this.OnFileMenuDropDownOpening);
             // 
+            // fileNew
+            // 
+            this.fileNew.Image = ((System.Drawing.Image)(resources.GetObject("fileNew.Image")));
+            this.fileNew.Name = "fileNew";
+            this.fileNew.RightToLeftAutoMirrorImage = true;
+            this.fileNew.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
+            this.fileNew.Size = new System.Drawing.Size(221, 22);
+            this.fileNew.Text = "&Add New Employee";
+            this.fileNew.Click += new System.EventHandler(this.OnFileNew);
+            // 
             // fileSave
             // 
             this.fileSave.Image = ((System.Drawing.Image)(resources.GetObject("fileSave.Image")));
@@ -259,6 +302,24 @@ namespace EmployeeManager
             this.fileExit.Size = new System.Drawing.Size(221, 22);
             this.fileExit.Text = "E&xit";
             this.fileExit.Click += new System.EventHandler(this.OnFileExit);
+            // 
+            // dataToolStripMenuItem
+            // 
+            this.dataToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.employeeDelete});
+            this.dataToolStripMenuItem.Name = "dataToolStripMenuItem";
+            this.dataToolStripMenuItem.Size = new System.Drawing.Size(71, 20);
+            this.dataToolStripMenuItem.Text = "&Employee";
+            // 
+            // employeeDelete
+            // 
+            this.employeeDelete.Image = ((System.Drawing.Image)(resources.GetObject("employeeDelete.Image")));
+            this.employeeDelete.Name = "employeeDelete";
+            this.employeeDelete.RightToLeftAutoMirrorImage = true;
+            this.employeeDelete.ShortcutKeys = System.Windows.Forms.Keys.Delete;
+            this.employeeDelete.Size = new System.Drawing.Size(131, 22);
+            this.employeeDelete.Text = "&Delete";
+            this.employeeDelete.Click += new System.EventHandler(this.OnEmployeeDelete);
             // 
             // statusStrip1
             // 
@@ -290,66 +351,6 @@ namespace EmployeeManager
             this.rowsAffectedLabel.Size = new System.Drawing.Size(112, 19);
             this.rowsAffectedLabel.Text = "No row(s) affected.";
             // 
-            // dataToolStripMenuItem
-            // 
-            this.dataToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.employeeDelete});
-            this.dataToolStripMenuItem.Name = "dataToolStripMenuItem";
-            this.dataToolStripMenuItem.Size = new System.Drawing.Size(71, 20);
-            this.dataToolStripMenuItem.Text = "&Employee";
-            // 
-            // employeeDelete
-            // 
-            this.employeeDelete.Image = ((System.Drawing.Image)(resources.GetObject("employeeDelete.Image")));
-            this.employeeDelete.Name = "employeeDelete";
-            this.employeeDelete.RightToLeftAutoMirrorImage = true;
-            this.employeeDelete.ShortcutKeys = System.Windows.Forms.Keys.Delete;
-            this.employeeDelete.Size = new System.Drawing.Size(131, 22);
-            this.employeeDelete.Text = "&Delete";
-            this.employeeDelete.Click += new System.EventHandler(this.OnEmployeeDelete);
-            // 
-            // fileNew
-            // 
-            this.fileNew.Image = ((System.Drawing.Image)(resources.GetObject("fileNew.Image")));
-            this.fileNew.Name = "fileNew";
-            this.fileNew.RightToLeftAutoMirrorImage = true;
-            this.fileNew.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
-            this.fileNew.Size = new System.Drawing.Size(221, 22);
-            this.fileNew.Text = "&Add New Employee";
-            this.fileNew.Click += new System.EventHandler(this.OnFileNew);
-            // 
-            // dataGridViewTextBoxColumn2
-            // 
-            this.dataGridViewTextBoxColumn2.DataPropertyName = "FirstName";
-            this.dataGridViewTextBoxColumn2.HeaderText = "First Name";
-            this.dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
-            // 
-            // dataGridViewTextBoxColumn3
-            // 
-            this.dataGridViewTextBoxColumn3.DataPropertyName = "LastName";
-            this.dataGridViewTextBoxColumn3.HeaderText = "Last Name";
-            this.dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
-            // 
-            // dataGridViewTextBoxColumn5
-            // 
-            this.dataGridViewTextBoxColumn5.DataPropertyName = "EmployeeTypeId";
-            this.dataGridViewTextBoxColumn5.DataSource = this.employeeTypeBindingSource;
-            this.dataGridViewTextBoxColumn5.DisplayMember = "EmployeeTypeName";
-            this.dataGridViewTextBoxColumn5.DisplayStyle = System.Windows.Forms.DataGridViewComboBoxDisplayStyle.ComboBox;
-            this.dataGridViewTextBoxColumn5.HeaderText = "Employee Type";
-            this.dataGridViewTextBoxColumn5.Name = "dataGridViewTextBoxColumn5";
-            this.dataGridViewTextBoxColumn5.Resizable = System.Windows.Forms.DataGridViewTriState.True;
-            this.dataGridViewTextBoxColumn5.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.Automatic;
-            this.dataGridViewTextBoxColumn5.ValueMember = "EmployeeTypeID";
-            // 
-            // employeeTypeBindingSource
-            // 
-            this.employeeTypeBindingSource.DataSource = typeof(EmployeeManager.Data.EmployeeType);
-            // 
-            // employeeBindingSource
-            // 
-            this.employeeBindingSource.DataSource = typeof(EmployeeManager.Data.Employee);
-            // 
             // MainWindow
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
@@ -372,13 +373,13 @@ namespace EmployeeManager
             ((System.ComponentModel.ISupportInitialize)(this.employeeBindingNavigator)).EndInit();
             this.employeeBindingNavigator.ResumeLayout(false);
             this.employeeBindingNavigator.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.employeeBindingSource)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.employeeDataGridView)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.employeeTypeBindingSource)).EndInit();
             this.menuStrip1.ResumeLayout(false);
             this.menuStrip1.PerformLayout();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.employeeTypeBindingSource)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.employeeBindingSource)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

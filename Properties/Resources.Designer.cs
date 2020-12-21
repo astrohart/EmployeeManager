@@ -115,7 +115,9 @@ namespace EmployeeManager.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Are you sure you want to delete &apos;{0}&apos;?.
+        ///   Looks up a localized string similar to Are you sure you want to delete &apos;{0}&apos;?
+        ///
+        ///This operation cannot be undone..
         /// </summary>
         internal static string Confirm_DeleteEmployee {
             get {

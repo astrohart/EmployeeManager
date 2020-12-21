@@ -155,6 +155,36 @@ namespace EmployeeManager
             ) == DialogResult.Yes;
 
         /// <summary>
+        ///     Deletes the currently-selected Employee record from the data source.
+        /// </summary>
+        /// <remarks>
+        ///     Before the delete occurs, the user is prompted as to whether they are
+        ///     sure they want to proceed.
+        /// </remarks>
+        private void DeleteEmployee()
+        {
+            // End the current editing operation, if any
+            employeeBindingSource.EndEdit();
+
+            // Prompt the user to confirm that they are sure they want to delete
+            // the current record.
+            if (!CanDeleteEmployee()) return;
+
+            // Remove the current record from the binding list (note that this
+            // only affects our LOCAL copy of the data source, not the data source
+            // itself.  However, on doing a Save operation, this will percolate all
+            // the way down to the data source).
+            employeeBindingSource.RemoveCurrent();
+
+            // We commit changes right away to ensure data integrity, in case
+            // other people are also touching the same database.  This way,
+            // we don't wait for the user to click the Save button and then
+            // lose the opportunity to execute the transaction that deletes
+            // the record (before someone else does).
+            EmployeesServiceManager.Instance.SaveAll();
+        }
+
+        /// <summary>
         ///     Loads data from the data source and populates the grid view and combo boxes
         ///     with it.
         /// </summary>
@@ -234,8 +264,15 @@ namespace EmployeeManager
         ///     A <see cref="T:System.EventArgs" /> that contains the event
         ///     data.
         /// </param>
-        private void OnEmployeeDelete(object sender, EventArgs e) =>
-            bindingNavigatorDeleteItem.PerformClick();
+        /// <remarks>
+        ///     This method calls the
+        ///     <see cref="M:EmployeeManager.MainWindow.DeleteEmployee" /> method that
+        ///     provides the means to carry out the delete operation.
+        /// </remarks>
+        private void OnEmployeeDelete(object sender, EventArgs e)
+        {
+            DeleteEmployee();
+        }
 
         /// <summary>
         ///     Called when the user chooses the Exit command on the File menu.

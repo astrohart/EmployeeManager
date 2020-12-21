@@ -149,6 +149,8 @@ Please put the Employees.mdf file in the same folder as EmployeeManager.exe, and
     <value>Employee Type</value>
   </data>
   <data name="Confirm_DeleteEmployee" xml:space="preserve">
-      <value>Are you sure you want to delete '{0}'?</value>
+    <value>Are you sure you want to delete '{0}'?
+
+This operation cannot be undone.</value>
   </data>
 </root>

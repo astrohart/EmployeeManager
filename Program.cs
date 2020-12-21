@@ -68,33 +68,60 @@ namespace EmployeeManager
             );
         }
 
+        /// <summary>
+        ///     Sets up the database files that this application utilizes to be installed
+        ///     in the current user's local application data directory path.
+        /// </summary>
+        /// <remarks>
+        ///     Each user on the same computer who utilizes this application gets the
+        ///     same local copy of the database.
+        /// </remarks>
         private static void ConfigureDatabaseFileLocation()
         {
             // ASSUMING that our deploy_db.bat script copies our .mdf and .ldf files
-            // to %LOCALAPPDATA%\xyLOGIX, LLC, we need to switch the data directory in
+            // to %PROGRAMDATA%\xyLOGIX, LLC, we need to switch the data directory in
             // the app.config to be there
             var appDataDir = Environment
-                .ExpandEnvironmentVariables(@"%LOCALAPPDATA%\xyLOGIX, LLC")
+                .ExpandEnvironmentVariables(@"%PROGRAMDATA%\xyLOGIX, LLC")
                 .ToUpperInvariant();
 
-            /* obviously, File I/O here should be done inside a try/catch, but
-             we are going to, for expediency, make the naive assumption here that
-            our I/O will work just fine. */
+            try
+            {
+                if (!Directory.Exists(appDataDir))
+                    Directory.CreateDirectory(appDataDir);
 
-            if (!Directory.Exists(appDataDir))
-                Directory.CreateDirectory(appDataDir);
+                var destMdfFilePath = Path.Combine(appDataDir, "Employees.mdf");
+                var destDatabaseLogFilePath = Path.Combine(
+                    appDataDir, "Employees_log.ldf"
+                );
+                var appInstallationDir =
+                    Path.GetDirectoryName(Application.ExecutablePath);
+                if (appInstallationDir == null)
+                    return;
 
-            var appInstallationDir =
-                Path.GetDirectoryName(Application.ExecutablePath);
-            if (appInstallationDir == null)
-                return;
+                // don't overwrite the database that all users see
+                if (!File.Exists(destMdfFilePath))
+                    new FileInfo(
+                        Path.Combine(appInstallationDir, "Employees.mdf")
+                    ).CopyTo(destMdfFilePath);
+                if (!File.Exists(destDatabaseLogFilePath))
+                    new FileInfo(
+                        Path.Combine(appInstallationDir, "Employees_log.ldf")
+                    ).CopyTo(destDatabaseLogFilePath);
 
-            new FileInfo(Path.Combine(appInstallationDir, "Employees.mdf"))
-                .CopyTo(Path.Combine(appDataDir, "Employees.mdf"), true);
-            new FileInfo(Path.Combine(appInstallationDir, "Employees_log.ldf"))
-                .CopyTo(Path.Combine(appDataDir, "Employees_log.ldf"), true);
+                AppDomain.CurrentDomain.SetData("DataDirectory", appDataDir);
+            }
+            catch (Exception ex)
+            {
+                // some sort of error occurred.
+                ProgressWindow.Instance.Hide();
+                MessageBox.Show(
+                    Resources.Error_CannotFindDatabase, Application.ProductName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Stop
+                );
 
-            AppDomain.CurrentDomain.SetData("DataDirectory", appDataDir);
+                CaptureErrorInfo(ex);
+            }
         }
 
         /// <summary>

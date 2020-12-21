@@ -115,13 +115,20 @@ namespace EmployeeManager.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Are you sure you want to delete &apos;{0}&apos;?
-        ///
-        ///This operation cannot be undone..
+        ///   Looks up a localized string similar to Are you sure you want to delete the selected row?.
         /// </summary>
-        internal static string Confirm_DeleteEmployee {
+        internal static string Confirm_DeleteEmployeeWithEmptyName {
             get {
-                return ResourceManager.GetString("Confirm_DeleteEmployee", resourceCulture);
+                return ResourceManager.GetString("Confirm_DeleteEmployeeWithEmptyName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Are you sure you want to delete &apos;{0}&apos;?.
+        /// </summary>
+        internal static string Confirm_DeleteEmployeeWithNameKnown {
+            get {
+                return ResourceManager.GetString("Confirm_DeleteEmployeeWithNameKnown", resourceCulture);
             }
         }
         

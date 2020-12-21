@@ -148,9 +148,10 @@ Please put the Employees.mdf file in the same folder as EmployeeManager.exe, and
   <data name="ColumnHeader_EmployeeType" xml:space="preserve">
     <value>Employee Type</value>
   </data>
-  <data name="Confirm_DeleteEmployee" xml:space="preserve">
-    <value>Are you sure you want to delete '{0}'?
-
-This operation cannot be undone.</value>
+  <data name="Confirm_DeleteEmployeeWithNameKnown" xml:space="preserve">
+    <value>Are you sure you want to delete '{0}'?</value>
+  </data>
+  <data name="Confirm_DeleteEmployeeWithEmptyName" xml:space="preserve">
+    <value>Are you sure you want to delete the selected row?</value>
   </data>
 </root>

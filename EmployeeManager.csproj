@@ -200,6 +200,8 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="CREATE Empty Employees Database.sql" />
+    <Content Include="CREATE Employees Database w sample data.sql" />
     <Content Include="EmployeeManager.BusinessLayer.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>EmployeeManager.BusinessLayer.cs</LastGenOutput>

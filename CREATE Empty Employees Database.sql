@@ -29,3 +29,5 @@ INSERT INTO [dbo].[EmployeeTypes] ([EmployeeTypeId], [EmployeeTypeName]) VALUES 
 INSERT INTO [dbo].[EmployeeTypes] ([EmployeeTypeId], [EmployeeTypeName]) VALUES (2, N'Grand Poobah')
 INSERT INTO [dbo].[EmployeeTypes] ([EmployeeTypeId], [EmployeeTypeName]) VALUES (3, N'Supreme Leader')
 SET IDENTITY_INSERT [dbo].[EmployeeTypes] OFF
+
+ALTER DATABASE CURRENT SET READ_WRITE

@@ -1,0 +1,2046 @@
+﻿<#@ template language="C#" debug="false" hostspecific="true" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System" #>
+<#@ import namespace="System.Collections" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ assembly name="System.Core" #>
+<#@ assembly name="System.Data.Entity" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System.Reflection" #>
+<#@ assembly name="EnvDTE" #>
+<#@ import namespace="EnvDTE" #>
+<#@ assembly name="System.Data.Entity.Design" #>
+<#@ import namespace="System.Data.Entity.Design.PluralizationServices" #>
+
+<#  
+
+/* 
+    EF6 Robust and Fault-Tolerant Business Layer Generation Script
+    Tailored to Scaffold the Business Layer for a C# Windows Forms Application
+
+    Copyleft 2020 by Brian C. Hart, Ph.D.  This code may be freely distributed
+    for all purposes, commercial or otherwise, so long as this copyleft notice
+    is retained.
+    
+    Features;
+    
+        - <dbcontext-name>ConnectionTester static class
+          
+          Supports fault-tolerance by providing a static method, IsDatabaseOnline,
+          that allows applications to ensure that the underlying database (being that
+          it is an enabler after all) is actually visible to the computer running
+          this code.
+          
+        - Implements the Repository/UnitOfWork pattern
+        
+          Repositories are implemented for each table, and a really basic UnitOfWork
+          pattern is implemented. In principle, only groups of related tables should
+          be in units of work.  But this .tt files does not read the table relationships;
+          it just creates one humongous UnitOfWork class for the whole damn thing, which
+          may or may not be what yout want.
+          
+        - Service singleton object for each table
+        
+          Each table in your database is wrapped by a Singleton that mediates access
+          to the unit of work(s) for that table.  It's also a partial class, so that
+          you can add, say, specialized CRUD methods that need to deal with data in a
+          particular sequence (in the absence of triggers implemented on the database
+          itself, which is really what should be done).  Each table's Service object
+          can be accessed through its Instance property anywhere else in your program
+          that can see this business layer.
+          
+        - DataServiceManager singleton object to manage overall data interactions
+        
+          The *Service singletons are managed by a DataServiceManager singleton, which
+          itself is named after your DbContext object.  The idea is that this provides
+          single-point-of-access to such things as connecting to the database and managing
+          change-tracking and saving.  This spares applications from having to call 
+          the Unit of Work or the respective services.
+          
+          The DataServiceManager has an InitializeAll() method that allows applications to
+          bring up the database connection in the startup method in a very straightforward
+          manner.  The HasChanges property of the DataServiceManager ties the HasChanges
+          properties of the various table Services together with a logical OR.  This can
+          be useful for, e.g., greying out and ungreying a Save button in your GUI.  There
+          is also a SaveAll() method in the DataServiceManager that invokes the Save()
+          method on the all the Services one at a time, tallying up the total rows affected.
+          
+          Finally, the DataServiceManager class also provides methods for hooking up just a
+          single event handler to the events raised by the individual Services, as a group.
+
+    Directions for use:
+    
+       1. Create a new Class Library project in the same solution as your Data Access Layer.
+            - This is to be your Business Layer (i.e., to hold your Repositories etc.)
+       2. Add a Project Reference from the new project to your Data Access Layer.
+       3. Place this file in your business layer class library.
+       4. In the targetNamespace variable below, replace the existing placeholder text.
+             - The placeholder text gets replaced with the name of the namespace that
+           contains your DbContext.
+       5. In the efContext variable below, replace the existing placeholder text.
+             - The placeholder text gets replaced with the name of that class in your
+           Data Access Layer which is derived from DbContext or some descendant
+           of it.
+         - NOTE: This .tt file assumes that the name of your DbContext follows the 
+           convention <name-of-database>DbContext or <name-of-database>Entities.
+         - If it does not adhere to this convention, modify the GetDataSourceName() method,
+           declared below, to return a string containing the name of the specific database
+           that data is being pulled from.
+       6. Save this file after your changes have been made.
+             - Code will then be generated to fully abstract away your Data Access
+           Layer behind repositories and units of work etc. 
+         - NOTE: All related groups of tables will be automatically gathered together
+           under the applicable unit of work class that corresponds to the root-level 
+           primary-key table of the group.
+       7. In your application's start-up code, call <database-name>ServiceManager.Instance.InitializeAll().
+             - There are two overloads of InitializeAll().  The first overload has an optional
+           string parameter called connectionString.  If you pass it a valid connection string
+           for your data source, it will attempt to connect to the data source.  If you call
+           InitializeAll() with no parameters. then it tries to pull the connection string
+           from the App.config file or use whatever your DbContext is configured to use.
+         - The second overload takes a reference to any of your generated UnitOfWork classes that
+           may already be connected to the data source.  This is handy for switching database
+           connections on the fly.
+       8. In the .tt file that generates your DbContext object, go into the implementation of the OnModelCreating
+          override (in a Database-First scenario, of course) and comment out the line that 
+          says 'throw new UnintentionalCodeFirstException();'.  This is superfluous and outright dangerous
+          for our use case.
+       9. In the .tt file that generates your DbContext object, alter the parameter list of the default 
+          constructor to cotain a single string connectionString parameter whose default value is the 
+          "name=<config-section>" value that is automatically generated by the EF6 wizards.  Then, pass
+          the value of connectionString to the base-member-initializer that's called by that constructor.
+
+        NOTE: As we all know, the general way to index a database table is to utilize a 32-bit integer field
+        named <table-name>ID (case-sensitive); but, it's by no means the only way.  For example, SQLite uses
+        a 64-bit value for its primary key; or one might also utilize a GUID (uniqueidentifier) for the primary
+        key column.  Or perhaps the datatype is not the issue; rather the ID column could be named <table-name>Id
+        or even something completely different.  To address these failings in the script, do a "Find" in your IDE
+        for the terms "int id" or "ID" (case-sensitive).  And of course, be wary of the different bitnesses of
+        integer columns.  A further version of this .tt file will maybe parse the table schema itself and then 
+        craft code that is built exactly to spec; however, this is only possible to a certain degree, since
+        DBAs have quite a lot of freedom in naming their database columns and assigning them data types.  It's
+        conceivable that a table might not even HAVE a primary key (such as a view).  Note that this .tt
+        file does nothing to handle Views and/or stored procedures -- yet.  Or, this .tt file very well might, and 
+        I just forgot to update this documentation to state otherwise, LOL :-)
+       
+        I hope you like this script.  I tried to make it as all-inclusive and as one-stop-shop as possible.
+        Just add water -- i.e., just add this script, make a few tweaks, save, and voila!
+       
+       NOTE: Be sure that every project in your solution that either directly or indirectly references
+       either your Data Access Layer or Business Layer have references to the EntityFramework NuGet 
+       package and all the database config info in everyone's App.config or web.config should match
+       that of the Data Access Layer's project.
+    */
+
+    /* 
+        IN THE targetNamespace VARIABLE, PUT A STRING THAT IS THE NAME OF THE ROOT
+        NAMESPACE OF THE PROJECT WHERE THE CORRESPONDING .edmx FILE LIVES. 
+    */
+    string targetNamespace = "EmployeeManager.Data";
+    
+    /* 
+        IN THE efContext VARIABLE, PUT THE NAME OF THE CLASS WHICH YOU HAVE ALREADY
+        CREATED SEPARATELY, WHICH IS THE DbContext-DERIVED CLASS THAT WAS GENERATED FROM
+        YOUR .edmx. 
+    */
+    string efContext = "EmployeesEntities";
+
+    InitializeActiveProjectAndSolution();
+
+    var classes = FindClasses(this.ActiveProject, targetNamespace, "");
+    var classWithDbContext = classes.FirstOrDefault(currentClass => currentClass.Bases.OfType<CodeElement>().Any(currentBase => currentBase.Name == "DbContext"));
+
+    var listOfPocoNames = classes
+        .Select(currentClass => currentClass.Name)
+        .ToList();
+
+    if(classWithDbContext != null)
+    {
+        efContext = classWithDbContext.Name;
+        listOfPocoNames.Remove(efContext);
+    }
+
+    listOfPocoNames.RemoveAll(s => s.Contains("UnitOfWork"));
+    listOfPocoNames.RemoveAll(s => s.Contains("Repository"));
+    listOfPocoNames.RemoveAll(s => s.Contains("Service"));
+    listOfPocoNames.RemoveAll(s => s.Contains("Base"));
+    listOfPocoNames.RemoveAll(s => s.Contains("sysdiagram"));
+    
+    if (listOfPocoNames.Any())	// meaningless to proceed if we've removed all elements from the list
+    {
+        GenerateRepositoryFromPoco(this.ActiveProject, targetNamespace, listOfPocoNames, efContext);
+        GenerateDataServiceManagerFromPOCOs(this.ActiveProject, targetNamespace, listOfPocoNames, efContext);
+    }
+    
+    // The first file that is generated by this template is for the Unit of Work (UoW)
+    // That is somewhat of a misnomer, since right now, we just generate one UoW per
+    // data source.  
+    
+    // First, we generate the interface and then the concrete class that implements it.
+    
+    /*
+    NOTE: For the XML summary documentation comments below, we will just have them
+      ther on one huge line as far as this template outputs them.  This .tt file
+    assumes that the user has a Visual Studio extension present that formats code and comments
+    in an aesthetically-pleasing manner, such as has been defined by the developer or their team.
+    */
+#>
+<#=        GenerateFileHeader()#>
+
+using System;
+using <#=        targetNamespace#>;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary> Defines the functionality for a unit of work on the <#=        GetDataSourceName(efContext)#> data
+/// source. </summary>
+public partial interface I<#=        GetDataSourceName(efContext)#>UnitOfWork : IDisposable
+{
+<#    PushIndent("    "); #>
+    <#
+    /* 
+       Interface: I<database-name>UnitOfWork
+       
+       Objects that implement this interface should have a series of 
+       properties, one for each of the related Repositories.  There's
+       basically a 1-to-1 relationship between tables (POCOs) and Repositories.
+    
+       There should be a corresponding Repository for each of our
+       table POCOs.  Iterate over the listOfPocoNames collection (which
+       has the list of POCO names) and, for each corresponding
+       Repository, generate a read-only property by which that 
+       Repository can be accessed.
+       
+       If the listOfPocoNames collection has zero elements, then this loop simply
+       will not iterate, and the interface definition will not have any Repository
+       accessor properties.
+    */
+    foreach(string className in listOfPocoNames)
+    {
+        var properClassName = GetProperClassName(className);
+        var repositoryInterfaceName = "I" + properClassName + "Repository";
+        if (repositoryInterfaceName.Contains("UnitOfWork")) continue;
+    #>
+
+/// <summary>Gets a reference to an instance of an object that implements <see cref="T:<#=            this.BusinessLayerNameSpace#>.<#=            repositoryInterfaceName#>"/> and which accesses the data in the <#=            this.Pluralize(className)#> table of the data source.</summary>
+<#=            repositoryInterfaceName + " " + this.Pluralize(className) #> { get; }
+    <#
+    }
+    #>
+
+/// <summary>
+/// Gets a string containing the connection string (or the configuraton-file section name)
+/// that was used to create this instance.
+/// </summary>
+string ConnectionString { get; }
+    
+/// <summary>Saves changes made to the data source.</summary>
+/// <returns>Number of records affected by the Save operation; -1 if an 
+/// error occurred.</returns>
+/// <remarks>This method will automatically attempt a graceful closure 
+/// of the handle to the underlying data source in the case that the return
+// value is -1.</remarks>
+int Save();
+
+/// <summary>Gets a reference to the data context object.</summary>
+<#=        efContext#> Context { get; }
+
+/// <summary>Raised when the connection to the data source is successful.</summary>
+event EventHandler DatabaseConnected;
+
+/// <summary>Raised when a connection cannot be successfully established 
+/// to the underlying data store.</summary>
+event EventHandler DatabaseNotAvailable;
+
+/// <summary>Raised when an error occurs.</summary>
+event Action<Exception> ExceptionRaised;
+
+/// <summary>
+/// Gets a value that indicates whether there are changes pending to be
+/// saved to the underlying data source.
+/// </summary>
+bool HasChanges { get; }
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<# 
+    /* 
+        OKAY: We are done specifying the templated output for the IUnitOfWork file.
+        Let's create it. The name shall follow the convention I<database-name>UnitOfWork.cs.
+    */
+    CreateFile(string.Format("I{0}UnitofWork.cs", GetDataSourceName(efContext))); 
+    
+    /*
+        The next file to be generated is the factory-pattern object that we call to obtain
+        instances of concrete implementations of this IXUnitOfWork interface (hereon, "X"
+        shall stand-in for the name of the database).
+    */
+#>
+<#=        GenerateFileHeader()#>
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); /* no further PushIndent calls are necessary, assuming a code-formatter is at work */#>
+/// <summary>Creates new unit of work objects on the <#=        GetDataSourceName(efContext)#> data
+/// source.</summary>
+public static class <#=        GetDataSourceName(efContext)#>UnitOfWorkFactory
+{
+
+/// <summary>Creates a new instance of an object that implements <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/>.</summary>
+/// <returns>Reference to a new instance of an object that implements <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/>.</returns>
+public static I<#=        GetDataSourceName(efContext)#>UnitOfWork Make()
+{
+    return new <#=        GetDataSourceName(efContext)#>UnitOfWork();
+}
+
+/// <summary>Creates a new instance of an object that implements <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/>and attempts to connect to the underlying data source using the specified <paramref name="connectionString"/>.</summary>
+/// <param name="connectionString">String containing the connection string to be utilized to establish
+/// a connection to the data source.</param>
+/// <returns>Reference to a new instance of an object that implements <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/>.</returns>
+public static I<#=        GetDataSourceName(efContext)#>UnitOfWork Make(string connectionString)
+{
+    if (string.IsNullOrWhiteSpace(connectionString))
+        return Make();  // use default overload if connection string is blank
+
+    return new <#=        GetDataSourceName(efContext)#>UnitOfWork(connectionString);
+}
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<#    CreateFile(string.Format("{0}UnitofWorkFactory.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System;
+<#
+    /*
+        OKAY, now we are generating an interface that is going to specify the methods and 
+        properties for a Service.  A Service basically wraps a Unit of Work and is a 
+        Singleton.  The point of this is to reduce the burden of newing up and disposing the
+        DbContext every time we want to make a DB call, with the added benefit of introducing
+        an object, for each table, that is available everywhere else in the application.
+
+        The thought process is to specify the interface below, and implement that interface using
+        an abstract base class that implements 
+    */
+#>
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    ");#>
+/// <summary>
+/// Defines the methods and properties of a database service.
+/// </summary>
+public partial interface I<#=        this.GetDataSourceName(efContext)#>Service
+{
+<#    PushIndent("    ");#>
+/// <summary>
+/// Initializes the underlying connection to the data source.  Callers can
+/// optionally pass a data source connection string or other key in the
+/// <paramref name="connectionString" /> parameter.
+/// </summary>
+/// <param name="connectionString">
+/// String containing information to be utilized in
+/// making a connection to the specific data source needed.
+/// </param>
+/// <remarks>
+/// If the <paramref name="connectionString" /> parameter is an empty string
+/// or whitespace, then the default connection to the data source, as configured
+/// in App.config, is utilized.  Otherwise, the connection string passed is
+/// sent to the underlying unit-of-work object.
+/// </remarks>
+void DoInitialize(
+    string connectionString = "");
+
+/// <summary>Initializes the underlying connection to the data source.  Callers must pass a reference to an instance of an object that implements the <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/> interface in for the <paramref name="unitOfWorkObject" /> parameter.  This object is utilized to access the underlying data source.
+/// </summary><param name="unitOfWorkObject">(Required.) Reference to an instance of an object that implements the <see cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork"/> interface</param>
+void DoInitialize(
+    I<#=        this.GetDataSourceName(efContext)#>UnitOfWork unitOfWorkObject);
+
+/// <summary>Raised when an error occurs.</summary>
+event Action<Exception> ExceptionRaised;
+
+/// <summary>Raised when changes have been successfully saved to the data source.  This event's handler will be passed an integer specifying the number of rows affected by the Save operation.</summary>
+/// <remarks>Subscribe to this event to receive a notification that a Save operation has completed successfully.</remarks>
+event Action<int> ChangesSaved;
+
+/// <summary>Saves changes made to the data source.</summary>
+/// <returns>Number of records affected by the Save operation; -1 if an 
+/// error occurred.</returns>
+/// <remarks>This method will automatically attempt a graceful closure 
+/// of the handle to the underlying data source in the case that the return
+// value is -1.</remarks>
+int Save();
+
+/// <summary>
+/// Gets a value that indicates whether there are changes pending to be
+/// saved to the underlying data source.
+/// </summary>
+bool HasChanges { get; }
+
+<#    PopIndent();#>
+}
+<#    PopIndent();#>
+}
+<#    CreateFile(string.Format("I{0}Service.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Defines methods and properties utilized by all data services accessing the
+/// <#=        GetDataSourceName(efContext)#> data source.
+/// </summary>
+public abstract partial class <#=        GetDataSourceName(efContext)#>ServiceBase : I<#=        this.GetDataSourceName(efContext)#>Service
+{
+<#    PushIndent("    "); #>
+
+/*
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        this.GetDataSourceName(efContext)#>ServiceBase" />
+/// and returns a reference to it.
+/// </summary>
+protected <#=        this.GetDataSourceName(efContext)#>ServiceBase()
+{
+    DoInitialize();
+}
+
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        this.GetDataSourceName(efContext)#>ServiceBase" />
+/// and returns a reference to it.
+/// </summary>
+/// <param name="connectionString">
+/// String containing information to be utilized in
+/// making a connection to the specific data source needed.
+/// </param>
+protected <#=        this.GetDataSourceName(efContext)#>ServiceBase(string connectionString)
+{
+    DoInitialize(connectionString);
+}
+
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        this.GetDataSourceName(efContext)#>ServiceBase" />
+/// and returns a reference to it.
+/// </summary>
+/// <param name="unitOfWorkObject">
+/// Reference to an instance of an already-instantiated unit of work objec that can
+/// be utilized to access the data source.
+/// </param>
+protected <#=        this.GetDataSourceName(efContext)#>ServiceBase(I<#=        GetDataSourceName(efContext)#> unitOfWorkObject)
+{
+    DoInitialize(unitOfWorkObject);
+}
+*/
+
+/// <summary>
+/// Gets or sets a reference to the object that implements
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.I<#=        GetDataSourceName(efContext)#>UnitOfWork" />
+/// being used to serve requests.
+/// </summary>
+public I<#=        GetDataSourceName(efContext)#>UnitOfWork UnitOfWork { get; set; }
+
+/// <summary>
+/// Performs cleanup when this object is removed from memory by the garbage
+/// collector.
+/// </summary>
+~<#=        GetDataSourceName(efContext)#>ServiceBase()
+{
+    CleanupUnitOfWork();
+}
+
+/// <summary>
+/// Performs cleanup of the underlying unit-of-work object.
+/// </summary>
+private void CleanupUnitOfWork()
+{
+    UnitOfWork?.Dispose();
+    UnitOfWork = null;
+}
+
+/// <summary>
+/// Initializes the underlying connection to the data source.  Callers can
+/// optionally pass a data source connection string or other key in the
+/// <paramref name="connectionString" /> parameter.
+/// </summary>
+/// <param name="connectionString">
+/// String containing information to be utilized in
+/// making a connection to the specific data source needed.
+/// </param>
+/// <remarks>
+/// If the <paramref name="connectionString" /> parameter is an empty string
+/// or whitespace, then the default connection to the data source, as configured
+/// in App.config, is utilized.  Otherwise, the connection string passed is
+/// sent to the underlying unit-of-work object.
+/// </remarks>
+// ReSharper disable once MemberCanBeProtected.Global
+public virtual void DoInitialize(
+    string connectionString = "")
+{
+    CleanupUnitOfWork();
+
+    UnitOfWork = string.IsNullOrWhiteSpace(connectionString)
+        ? new <#=        GetDataSourceName(efContext)#>UnitOfWork()
+        : new <#=        GetDataSourceName(efContext)#>UnitOfWork(connectionString);
+}
+
+/// <summary>
+/// Initializes the underlying connection to the data source.  Callers can
+/// optionally pass a data source connection string or other key in the
+/// <paramref name="connectionString" /> parameter.
+/// </summary>
+/// <param name="connectionString">
+/// String containing information to be utilized in
+/// making a connection to the specific data source needed.
+/// </param>
+/// <remarks>
+/// If the <paramref name="connectionString" /> parameter is an empty string
+/// or whitespace, then the default connection to the data source, as configured
+/// in App.config, is utilized.  Otherwise, the connection string passed is
+/// sent to the underlying unit-of-work object.
+/// </remarks>
+// ReSharper disable once MemberCanBeProtected.Global
+public virtual void DoInitialize(
+    I<#=        GetDataSourceName(efContext)#>UnitOfWork unitOfWorkObject)
+{
+    CleanupUnitOfWork();
+
+    UnitOfWork = unitOfWorkObject;
+}
+
+/// <summary>
+/// Raised when an error occurs.
+/// </summary>
+public event Action<Exception> ExceptionRaised;
+
+/// <summary>Raises the<see
+///     cref="E:<#=        this.BusinessLayerNameSpace#>.<#=        this.GetDataSourceName(efContext)#>ServiceBase.ExceptionRaised" />
+/// event.</summary>
+/// <param name="ex">A <see cref="T:System.Exception" /> that provides
+/// information on the error that occurred.</param>
+protected virtual void OnExceptionRaised(Exception ex) => ExceptionRaised?.Invoke(ex);
+
+/// <summary>Raised when changes have been successfully saved to the data source.  This event's handler will be passed an integer specifying the number of rows affected by the Save operation.</summary>
+/// <remarks>Subscribe to this event to receive a notification that a Save operation has completed successfully.</remarks>
+public event Action<int> ChangesSaved;
+
+/// <summary>Raises the<see
+///     cref="E:<#=        this.BusinessLayerNameSpace#>.<#=        this.GetDataSourceName(efContext)#>ServiceBase.ChangesSaved" />
+/// event.</summary>
+/// <param name="rowsAffected">(Required.) Integer that specifies the total number of rows affected by the Save operation.</param>
+protected virtual void OnChangesSaved(int rowsAffected) => ChangesSaved?.Invoke(rowsAffected);
+
+/// <summary>Saves changes made to the data source.</summary>
+/// <returns>Number of records affected by the Save operation; -1 if an 
+/// error occurred.</returns>
+/// <remarks>This method will automatically attempt a graceful closure of the handle to the underlying data source in the case that the return value is -1.  If the underlying unit of work has not been initialized, or the database is offline, this method also returns -1.</remarks>
+public int Save()
+{
+    if (!<#=        GetDataSourceName(efContext)#>ConnectionTester.IsDatabaseOnline())
+    {
+        return -1;
+    }
+    
+    if (UnitOfWork == null) return -1;	// unit of work not initialized
+    
+    var result = -1;
+
+    try
+    {
+        result = UnitOfWork.Save();
+
+        // Notify event subscribers that changes have been saved successfully.
+        OnChangesSaved(result);
+    }
+    catch(Exception ex)
+    {
+        OnExceptionRaised(ex);
+
+        result = -1;
+    }
+    
+    return result;
+}
+
+/// <summary>
+/// Gets a value that indicates whether there are changes pending to be
+/// saved to the underlying data source.
+/// </summary>
+public bool HasChanges => UnitOfWork != null && UnitOfWork.HasChanges;
+
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<#    CreateFile(string.Format("{0}ServiceBase.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System;
+using System.Data;
+using <#=        targetNamespace#>;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Implements a unit of work that manages data access to the <#=        this.GetDataSourceName(efContext)#>
+/// data source.
+/// </summary>
+public partial class <#=        GetDataSourceName(efContext)#>UnitOfWork : I<#=        GetDataSourceName(efContext)#>UnitOfWork
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork" />
+/// and returns a reference to it.
+/// </summary>
+/// <param name="context">
+/// Reference to an instance of
+/// <see cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        efContext#>" />
+/// that provides access to the underlying data source.
+/// </param>
+/// <remarks>
+/// This constructor initializes the
+/// <see
+///     cref="P:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork.Context" />
+/// property with the reference provided in the <paramref name="context" />
+/// parameter.
+/// </remarks>
+public <#=        GetDataSourceName(efContext)#>UnitOfWork(<#=        efContext #> context)
+{
+    Context = context ??
+                throw new ArgumentNullException(nameof(context));
+}
+
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork" />
+/// and returns a reference to it.
+/// </summary>
+/// <param name="connectionString">
+/// String containing the connection string to be utilized
+/// in order to access the underlying data source.
+/// </param>
+/// <remarks>
+/// This constructor attempts to connect to the data source using the connection
+/// string provided in the <paramref name="connectionString"/> parameter.
+/// </remarks>
+public <#=        GetDataSourceName(efContext)#>UnitOfWork(string connectionString)
+{
+    OnCreateContext(connectionString);
+}
+
+/// <summary>
+/// Constructs a new instance of
+/// <see
+///     cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork" />
+/// and returns a reference to it.
+/// </summary>
+/// <remarks>
+/// This constructor creates a new context object using its default constructor.
+/// The context object provides access to the data source.
+/// The
+/// <see
+///     cref="P:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork.Context" />
+/// property is assigned the reference to the newly-created context instance as its
+/// value by this constructor.
+/// </remarks>
+public <#=        GetDataSourceName(efContext)#>UnitOfWork()
+{
+    OnCreateContext();
+}
+    
+<#    foreach(string className in listOfPocoNames)
+    {
+        var properClassName = GetProperClassName(className);
+        var repositoryInterfaceName =  "I" + properClassName + "Repository";
+#>
+
+/// <summary>
+/// Gets a reference to an instance of an object that implements
+/// <see cref="T:<#=            this.BusinessLayerNameSpace#>.<#=            repositoryInterfaceName#>"/> and
+/// which accesses the data in the <#=            this.Pluralize(className)#> table
+/// of the data source.
+/// </summary>
+public <#=            repositoryInterfaceName + " " + this.Pluralize(className)#>
+        => new <#=            properClassName + "Repository" #>(Context);
+    <#    }#>
+
+/// <summary>
+/// Gets a reference to the synchronization root object for thread locking.
+/// </summary>
+protected object SyncRoot { get; } = new object();
+
+/// <summary>
+/// Saves changes made to the data source.
+/// </summary>
+/// <returns>Number of records affected by the Save operation; -1 if an 
+/// error occurred.</returns>
+/// <remarks>This method will automatically attempt a graceful closure 
+/// of the handle to the underlying data source in the case that the return
+// value is -1.</remarks>
+public int Save()
+{
+    if (Context == null) return -1;
+    
+    var result = -1;
+
+    try
+    {
+        lock(SyncRoot)
+        {
+            result = Context.SaveChanges();
+        }
+    }
+    catch(Exception ex)
+    {
+        OnExceptionRaised(ex);
+
+        result = -1;
+    }
+    finally
+    {
+        if (result == -1)
+            GracefullyCloseDatabase();
+    }
+    
+    return result;
+}
+
+/// <summary>
+/// Performs application-defined tasks associated with freeing, releasing,
+/// or resetting unmanaged resources.
+/// </summary>
+public void Dispose()
+{
+    Dispose(true);
+    GC.SuppressFinalize(this);
+}
+
+/// <summary>
+/// Gets a reference to the data context object.
+/// </summary>
+public <#=        efContext#> Context { get; private set; }
+
+/// <summary>
+/// Gets a string containing the connection string (or the configuraton-file section name)
+/// that was used to create this instance.
+/// </summary>
+public string ConnectionString => Context.Database.Connection.ConnectionString;
+
+/// <summary>
+/// Safely disposes of this object, releasing all associated resources.
+/// </summary>
+/// <param name="disposing">
+/// True if this object is disposed deterministically;
+/// Set to false if this method is being called by a finalizer.
+/// </param>
+protected virtual void Dispose(bool disposing)
+{
+    if (!disposing) return;
+    if (Context == null) return;
+    Context.Dispose();
+    Context = null;
+}
+
+protected void GracefullyCloseDatabase()
+{
+    if (Context == null) return;
+
+    try
+    {
+        if (Context.Database.Connection.State != ConnectionState.Closed)
+        {
+            Context.Database.Connection.Close();
+            Context.Dispose();
+            Context = null;
+        }
+    }
+    catch
+    {
+        // Ignored.
+    }
+}
+
+/// <summary>
+/// Sets up the data context and initializes the database connection.  Checks
+/// whether the underlying database is available.
+/// </summary>
+/// <returns>True if succeeded; false otherwise.</returns>
+/// <remarks>
+/// This method should be called prior to any actual database operations
+/// for each unit of work.  The reasoning being that this method also ensures
+/// the connection to the underlying database is intact prior to actually
+/// allowing the context to be utilized.
+/// </remarks>
+protected virtual bool OnCreateContext()
+{
+    if (!<#=        GetDataSourceName(efContext)#>ConnectionTester
+        .IsDatabaseOnline())
+        {
+            OnDatabaseNotAvailable();
+            return false;
+        }
+
+    // Check if already connected
+    if (Context != null) return true;
+
+    var result = true;
+
+    try
+    {
+        Context = new <#=        efContext #>();
+    }
+    catch(Exception ex)
+    {
+        OnExceptionRaised(ex);
+
+        result = false;
+    }
+    finally
+    {
+        if (!result)
+            GracefullyCloseDatabase();
+    }
+
+    if (result)
+        OnDatabaseConnected();
+
+    return result;
+}
+
+/// <summary>
+/// Sets up the data context and initializes the database connection.  Checks
+/// whether the underlying database is available.
+/// </summary>
+/// <param name="connectionString">String containing the connection string 
+/// to use to access the data source.  Must not be blank.</param>
+/// <returns>True if succeeded; false otherwise.</returns>
+/// <remarks>
+/// This method should be called prior to any actual database operations
+/// for each unit of work.  The reasoning being that this method also ensures 
+/// the connection to the underlying database is intact prior to actually 
+/// allowing the context to be utilized.
+/// </remarks>
+protected virtual bool OnCreateContext(string connectionString)
+{
+    if (string.IsNullOrWhiteSpace(connectionString))
+        return false;
+
+    if (!<#=        GetDataSourceName(efContext)#>ConnectionTester
+        .IsDatabaseOnline())
+        {
+            OnDatabaseNotAvailable();
+            return false;
+        }
+
+    // Check if already connected
+    if (Context != null) return true;
+
+    var result = true;
+
+    try
+    {
+        Context = new <#=        efContext#>(connectionString);
+    }
+    catch(Exception ex)
+    {
+        OnExceptionRaised(ex);
+
+        result = false;
+    }
+    finally
+    {
+        if (!result)
+            GracefullyCloseDatabase();
+    }
+
+    if (result)
+        OnDatabaseConnected();
+
+    return result;
+}
+
+/// <summary>
+/// Raised when the connection to the data source is successful.
+/// </summary>
+public event EventHandler DatabaseConnected;
+
+/// <summary>
+/// Raises the
+/// <see
+///     cref="E:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork.DatabaseConnected" />
+/// event.
+/// </summary>
+protected virtual void OnDatabaseConnected()
+{
+    if (DatabaseConnected == null) return;
+    DatabaseConnected(this, EventArgs.Empty);
+}
+
+/// <summary>
+/// Raised when a connection cannot be successfully established 
+/// to the underlying data store. 
+/// </summary>
+public event EventHandler DatabaseNotAvailable;
+
+/// <summary>
+/// Raises the
+/// <see
+///     cref="E:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork.DatabaseNotAvailable" />
+/// event.
+/// </summary>
+protected virtual void OnDatabaseNotAvailable()
+{
+    if (DatabaseNotAvailable == null) return;
+    DatabaseNotAvailable(this, EventArgs.Empty);
+}
+
+/// <summary>
+/// Raised when an error occurs.
+/// </summary>
+public event Action<Exception> ExceptionRaised;
+
+/// <summary>
+/// Raises the
+/// <see
+///     cref="E:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>UnitOfWork.ExceptionRaised" />
+/// event.
+/// </summary>
+/// <param name="ex">
+/// A <see cref="T:System.Exception" /> containing information
+/// about the exception that occurred.
+/// </param>
+protected virtual void OnExceptionRaised(Exception ex)
+{
+    if (ExceptionRaised == null) return;
+    ExceptionRaised(ex);
+}
+
+/// <summary>
+/// Gets a value that indicates whether there are changes pending to be
+/// saved to the underlying data source.
+/// </summary>
+public bool HasChanges => Context != null && Context.ChangeTracker.HasChanges();
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<#    CreateFile(string.Format("{0}UnitOfWork.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System;
+using System.Data;
+using System.Data.Entity;
+using <#=        targetNamespace#>;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary>
+///     Tests whether the data source that undergirds the <#=        GetDataSourceName(efContext)#>
+///     is connected and/or available.
+/// </summary>
+public static class <#=        GetDataSourceName(efContext)#>ConnectionTester
+{
+<#    PushIndent("    "); #>
+/// <summary>
+///     Initializes the one and only static instance of this class.
+/// </summary>
+static <#=        GetDataSourceName(efContext)#>ConnectionTester() => ResetDiagnosticProperties();
+
+/// <summary>
+///     Gets the connection string that was most recently utilized
+///     in order to test the connection to the data source.
+/// </summary>
+public static string LastUsedConnectionString { get; private set; }
+
+/// <summary>
+///     Gets a reference to a <see cref="T:System.Exception" /> object
+///     that contains information about the last error.
+/// </summary>
+public static Exception LastError { get; private set; }
+
+/// <summary>
+///     Checks whether a database associated with the given DbContext is even
+///     available
+///     (i.e., online vs. offline).
+/// </summary>
+/// <returns>True if the database is online and accessible; false otherwise.</returns>
+public static bool IsDatabaseOnline()
+{
+    var result = false;
+
+    using (var db = new <#=        GetDataSourceName(efContext)#>Entities())
+    {
+        result = TestConnectionToDatabase(db);
+    }
+
+    return result;
+}
+
+/// <summary>
+///     Checks whether a database associated with the given DbContext is even
+///     available
+///     (i.e., online vs. offline).
+/// </summary>
+/// <returns>True if the database is online and accessible; false otherwise.</returns>
+public static bool IsDatabaseOnline(string connectionString)
+{
+    var result = false;
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+        return result;
+
+    using (var db = new <#=        GetDataSourceName(efContext)#>Entities(connectionString))
+    {
+        result = TestConnectionToDatabase(db);
+    }
+
+    return result;
+}
+
+/// <summary>
+///     Used internally to ensure the data source connection associated with a
+///     <see cref="T:System.Data.Entity.DbContext" /> is gracefully closed.
+/// </summary>
+/// <param name="db">
+///     A <see cref="T:System.Data.Entity.DbContext" /> that is a reference to the
+///     database context object whose connection is to be closed.
+/// </param>
+/// <remarks>
+///     This method should only be called from a <c>finally</c> block.
+/// </remarks>
+private static void CloseDatabaseConnection(DbContext db)
+{
+    if (db == null)
+        return; // simply fail to operate if passed a null
+
+    // check the state of the db connection.  If it's in any other
+    // state except for closed, then call Close() on it to release
+    // operating system resources.  We do this in the finally block
+    // because this needs to happen whether or not an exception got
+    // thrown.
+    if (db.Database.Connection.State != ConnectionState.Closed)
+        db.Database.Connection.Close();
+}
+
+/// <summary>
+///     Initializes the value of the
+///     <see
+///         cref="P:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>ConnectionTester.LastUsedConnectionString" />
+///     property to the connection string that was last utilized by the
+///     <paramref name="db" /> object.
+/// </summary>
+/// <param name="db">
+///     A <see cref="T:System.Data.Entity.DbContext" /> that is a reference to the
+///     database context object whose connection is to be closed.
+/// </param>
+/// <remarks>
+///     This method does nothing if <paramref name="db" /> or any of its
+///     properties are a null reference.
+/// </remarks>
+private static void InitializeLastUsedConnectionString(DbContext db)
+{
+    if (db == null || db.Database == null ||
+        db.Database.Connection == null)
+        return;
+
+    LastUsedConnectionString = db.Database.Connection.ConnectionString;
+}
+
+/// <summary>
+///     Tests the connection to the database that is held by the
+///     data context, a reference to which is passed in the
+///     <paramref name="db" /> parameter.
+/// </summary>
+/// <param name="db">
+///     A <see cref="T:System.Data.Entity.DbContext" /> that is a reference to the
+///     database context object whose connection is to be closed.
+/// </param>
+/// <returns>
+///     Value indicating whether the connection to the data source could be
+///     opened successfully.
+/// </returns>
+private static bool TestConnectionToDatabase(DbContext db)
+{
+    var result = false;
+
+    ResetDiagnosticProperties();
+
+    if (db == null)
+        return result;
+
+    InitializeLastUsedConnectionString(db);
+
+    try
+    {
+        if (db.Database.Connection.State != ConnectionState.Open)
+            db.Database.Connection.Open();
+
+        result = db.Database.Exists();
+    }
+    catch (Exception ex)
+    {
+        result = false;
+
+        LastError = ex;
+    }
+    finally
+    {
+        CloseDatabaseConnection(db);
+    }
+
+    return result;
+}
+
+/// <summary>
+///     Resets the value of the
+///     <see
+///         cref="P:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>ConnectionTester.LastUsedConnectionString" />
+///     and
+///     <see
+///         cref="P:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>ConnectionTester.LastError" />
+///     properties to their default values.
+/// </summary>
+private static void ResetDiagnosticProperties()
+{
+    LastUsedConnectionString = string.Empty;
+    LastError = null;
+}
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<#    CreateFile(string.Format("{0}ConnectionTester.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System;
+using System.ComponentModel;
+using System.ComponentModel;
+using System.Data.Entity;
+using <#=        targetNamespace #>;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Provides access to the entities of type <typeparamref name="TEntity"/> in the data source.
+/// </summary>
+/// <typeparam name="TEntity">Type of the POCO representing the entity to be accessed.</typeparam>
+public abstract partial class <#=        GetDataSourceName(efContext)#>Repository<TEntity> : I<#=        GetDataSourceName(efContext)#>Repository<TEntity> where TEntity : class
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Reference to an instance of an object that provides access to the data set.
+/// </summary>
+private readonly DbSet<TEntity> _dataset;
+
+/// <summary>
+/// Constructs a new instance of
+/// <see cref="T:<#=        this.BusinessLayerNameSpace#>.<#=        GetDataSourceName(efContext)#>Repository" /> and
+/// returns a reference to it.
+/// </summary>
+/// <param name="context">
+/// A
+/// <see cref="T:<#=        targetNamespace #>.<#=        efContext #>" />
+/// that provides access to the underlying data source.
+/// </param>
+protected <#=        GetDataSourceName(efContext)#>Repository(<#=        efContext #> context)
+{
+    if (context == null)
+        throw new ArgumentNullException(nameof(context));
+
+    _dataset = context.Set<TEntity>();
+}
+
+/// <summary>
+/// Gets all records available in the data source.
+/// </summary>
+/// <returns>
+/// A <see cref="T:System.Collections.Generic.IEnumerable{T}" /> that
+/// allows access to the set of all records in the data source.
+/// </returns>
+public IBindingList GetAll()
+{
+    _dataset.Load();
+    return _dataset.Local.ToBindingList();
+}
+
+public TEntity GetById(int id)
+{
+    return _dataset.Find(id);
+}
+
+public void Add(TEntity entity)
+{
+    _dataset.Add(entity);
+}
+
+/// <summary>
+/// Deletes the record referred to by <paramref name="entity"/> from the dataset.
+/// </summary>
+/// <param name="entity">Reference to an instance of an entity object identifying the record to be removed.</param>
+public void Delete(TEntity entity)
+{
+    if (entity == null) return;
+    _dataset.Remove(entity);
+}
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+
+<#    CreateFile(string.Format("{0}Repository.cs", GetDataSourceName(efContext))); #>
+<#=        GenerateFileHeader()#>
+
+using System.ComponentModel;
+
+namespace <#=        this.BusinessLayerNameSpace#>
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Defines the functionality for a repository access which manages access to data.
+/// </summary>
+/// <typeparam name="T">
+/// Type of entity POCO that this class functions as a
+/// repository for.
+/// </typeparam>
+public partial interface I<#=        GetDataSourceName(efContext)#>Repository<T> where T : class
+{
+<#    PushIndent("    "); #>
+/// <summary>
+/// Gets all records available in the data source.
+/// </summary>
+/// <returns>
+/// A <see cref="T:System.Collections.ComponentModel.IBindingList" /> that
+/// allows access to the set of all records in the data source.
+/// </returns>
+IBindingList GetAll();
+
+/// <summary>
+/// Retrieves a record with primary key value <paramref name="id" />, from the
+/// dataset.
+/// </summary>
+/// <param name="id">Id of the record to be obtained.  Must be 1 or greater.</param>
+/// <returns></returns>
+/// <remarks>
+/// An exception will be thrown or a null reference returned if the record
+/// specified cannot be located.
+/// </remarks>
+T GetById(int id);
+
+/// <summary>
+/// Adds a new record, referred to by <paramref name="entity" />, to the dataset.
+/// </summary>
+/// <param name="entity">
+/// Reference to an instance of an entity object identifying
+/// the record to be added.
+/// </param>
+void Add(T entity);
+
+/// <summary>
+/// Deletes the record referred to by <paramref name="entity" /> from the dataset.
+/// </summary>
+/// <param name="entity">
+/// Reference to an instance of an entity object identifying
+/// the record to be removed.
+/// </param>
+void Delete(T entity);
+<#    PopIndent(); #>
+}
+<#    PopIndent(); #>
+}
+<#    CreateFile(string.Format("I{0}Repository.cs", GetDataSourceName(efContext))); #>
+<#+
+    public string Pluralize(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word))
+            return string.Empty;
+
+        var pluralizer = PluralizationService.CreateService(System.Globalization.CultureInfo.CurrentCulture);
+        return pluralizer.Pluralize(word);
+    }
+
+    public void GenerateRepositoryFromPoco(Project project, string targetNamespace, List<string> listOfPocoNames, string efContext)
+    {
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var pluralProperClassName = Pluralize(properClassName);
+            var repositoryName = properClassName + "Repository";
+            ClearIndent();
+            #>
+<#=GenerateFileHeader()#>
+
+using <#= targetNamespace #>;
+
+namespace <#= this.BusinessLayerNameSpace #>
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+///     Provides access to data from the <#=pluralProperClassName#> table in the data
+///     source.
+/// </summary>
+public partial class <#= repositoryName #> : <#=GetDataSourceName(efContext)#>Repository<<#=properClassName#>>,
+    I<#= repositoryName #>
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+///     Constructs a new instance of
+///     <see cref="T:<#=this.BusinessLayerNameSpace#>.<#= repositoryName #>" /> and
+///     returns a reference to it.
+/// </summary>
+public <#= repositoryName #>(<#= efContext #> context) : base(context)
+{
+    // TODO: Add code here to initialize the <#=GetDataSourceName(efContext)#> repository.
+}
+
+// TODO: Add another part of this (partial) class to implement custom functionality.
+
+<#+ PopIndent(); #>
+}
+<#+ PopIndent(); #>
+}
+<#+  CreateFile(string.Format("{0}.cs", repositoryName)); #>
+<#=GenerateFileHeader()#>
+
+using <#=targetNamespace#>;
+
+namespace <#= this.BusinessLayerNameSpace #>
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+/// Provides access to data from the <#= this.Pluralize(properClassName) #> table in the data source.
+/// </summary>
+public partial interface I<#= properClassName #>Repository : I<#=GetDataSourceName(efContext)#>Repository<<#= className #>>
+{
+    // TODO: Add any additional repository methods other than the generic ones (GetAll, GetById, Delete, Add).
+}
+<#+ PopIndent(); #>
+}
+<#+ CreateFile(@"I" + repositoryName + ".cs"); #>
+<#=GenerateFileHeader()#>
+
+using <#=targetNamespace#>;
+using System;
+using System.ComponentModel;
+using System.Linq;
+
+namespace <#=this.BusinessLayerNameSpace#>
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+/// Performs operations on the database to store/retrieve entries
+/// in the data source for <#=this.Pluralize(properClassName)#>.
+/// </summary>
+public partial class <#=properClassName#>Service : <#=GetDataSourceName(efContext)#>ServiceBase
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+/// Empty, static constructor to prohibit direct allocation of this class.
+/// </summary>
+static <#=properClassName#>Service() { }
+
+/// <summary>
+/// Empty, protected constructor to prohibit direct allocation of this class.
+/// </summary>
+protected <#=properClassName#>Service() { }
+
+/// <summary>
+/// Gets a reference to the one and only instance of
+/// <see cref="T:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>Service" />.
+/// </summary>
+public static <#=properClassName#>Service Instance { get; } =
+    new <#=properClassName#>Service();
+
+/// <summary>
+/// Adds the data specified by the
+/// <see cref="T:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>" /> entity
+/// object to the data source.
+/// </summary>
+/// <param name="newEntity">
+/// Reference to an instance of the entity object that
+/// contains the data to be added.
+/// </param>
+/// <param name="existingItemPredicate">
+/// (Optional.) Lambda expression that defines a query to be executed to see if any 
+/// records with the specified criteria already exist in the data source.  If this 
+/// paramete is not provided, no search for an already-existing record is conducted.
+/// </param>
+/// <returns>If the add was successful, the primary key value of the new row.</returns>
+/// <remarks>Optionally searches the data source for an existing item, where 'existing'
+/// is defined by whatever criteria are specified in the <paramref name="existingItemPredicate"/>.
+/// If a row matching the criteria is found, the method simply returns its primary key
+/// value but otherwise will not perform the Add operation.  If no predicate is supplied,
+/// or a row matching the criteria is not found, then the method attempts to perform
+/// the Add operation.
+/// </remarks>
+public int Add(<#=properClassName#> newEntity, Func<<#=properClassName#>, bool> existingItemPredicate = null)
+{
+    var result = -1;        // failed to add new entry
+
+    // If the reference to the new entity POCO containing data to be
+    // added is a null reference, then we can't do anything.
+    if (newEntity == null)
+        return result;
+
+    // Search the data source for an existing record. Criteria for the match
+    // are specified by the implementation of the delegate pointed to by the
+    // existingItemPredicate parameter.  If no predicate is provided, then do
+    // not conduct a search.
+    var idOfExistingRow = -1;
+    if (existingItemPredicate != null)
+    {
+        var foundEntity = GetAll().Cast<<#=properClassName#>>().FirstOrDefault(existingItemPredicate);
+        idOfExistingRow = foundEntity == null ? -1 : foundEntity.<#=properClassName#>ID;
+    }
+
+    // If we have a value of 1 or greater for the primary key value of an
+    // existing item matching the criteria mandated by the existingItemPredicate
+    // parameter, then stop and return the primary key ID value of that row.
+    if (idOfExistingRow >= 1)
+        return idOfExistingRow;
+
+    // If we are here, then no existing row was located.  Perform the Add
+    // operation on the data source.
+    try
+    {
+        UnitOfWork.<#=this.Pluralize(properClassName)#>.Add(newEntity);
+        if (UnitOfWork.Save() > 0)
+            result = newEntity.<#=properClassName#>ID;
+    }
+    catch (Exception ex)
+    {
+        result = -1;
+
+        OnExceptionRaised(ex);
+    }
+
+    return result;
+}
+
+/// <summary>
+/// Deletes the record with the primary key value of <paramref name="id" />. if
+/// it's still in the table.
+/// </summary>
+/// <param name="id">Primary key value of the entity to be deleted.</param>
+/// <returns>Number of rows affected by the delete; -1 if a problem occurred.</returns>
+/// <remarks>
+/// This method calls the
+/// <see
+///     cref="M:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>Service.GetById" />
+/// method to look up the entity object to delete from the data source, and then
+/// performs the Delete operation.
+/// </remarks>
+public int Delete(int id)
+{
+    var result = -1;
+    if (id < 1) // ID values always start from 1
+        return result;
+
+    // Attempt to perform the Delete operation.
+    try
+    {
+        var entityToDelete = GetById(id);
+        if (entityToDelete == null) // not found
+            return result;
+
+        result = Delete(entityToDelete);
+    }
+    catch (Exception ex)
+    {
+        result = -1;
+
+        OnExceptionRaised(ex);
+    }
+
+    return result;
+}
+
+/// <summary>
+/// Deletes the record specified by <paramref name="entityToDelete" />.
+/// </summary>
+/// <param name="entityToDelete">
+/// Reference to an instance of
+/// <see cref="T:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>" /> that
+/// indicates the row to be deleted.
+/// </param>
+/// <returns>Number of rows affected by the delete; -1 if a problem occurred.</returns>
+/// <remarks>
+/// This method calls the
+/// <see
+///     cref="M:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>Service.GetById" />
+/// method to look up the entity object to delete from the data source, and then
+/// performs the Delete operation.
+/// </remarks>
+public int Delete(<#=properClassName#> entityToDelete)
+{
+    var result = -1;
+    if (entityToDelete == null) // we don't know what to do with a null reference
+        return result;
+
+    // Attempt to perform the Delete operation.
+    try
+    {
+        UnitOfWork.<#=this.Pluralize(properClassName)#>.Delete(entityToDelete);
+        result = UnitOfWork.Save();
+    }
+    catch (Exception ex)
+    {
+        result = -1;
+
+        OnExceptionRaised(ex);
+    }
+
+    return result;
+}
+
+/// <summary>
+/// Given the name of a <#=properClassName#>, looks up its database ID.
+/// </summary>
+/// <param name="searchPredicate">
+/// Labmda expression for a search predicate that will determine when a
+/// row's data matches the criteria for finding the ID of that row.
+/// </param>
+/// <returns><#=properClassName#> ID, or -1 if not found.</returns>
+public int Find<#=properClassName#>Id(Func<<#=properClassName#>, bool> searchPredicate)
+{
+    var result = -1;
+
+    if (searchPredicate == null)
+        return -1;
+
+    try
+    {
+        // If none of the records match the search criteria, then give up.
+        if (GetAll().Cast<<#=properClassName#>>().All(x => !searchPredicate(x)))
+            return -1;
+
+        // If we've made it here, then there should be a positive match.
+        var entityFound = GetAll()
+            .Cast<<#=properClassName#>>()
+            .FirstOrDefault(x=>searchPredicate(x));
+
+        if (entityFound != null)
+            result = entityFound.<#=properClassName#>ID;
+    }
+    catch (Exception ex)
+    {
+        result = -1;
+
+        OnExceptionRaised(ex);
+    }
+
+    return result;
+}
+
+/// <summary>
+/// Gets a reference to an enumerable collection of entity data table
+/// entries.
+/// </summary>
+/// <returns>
+/// Reference to an enumerable collection of entity data table
+/// entries.
+/// </returns>
+public IBindingList GetAll()
+{
+    IBindingList result;
+
+    try
+    {
+        result = UnitOfWork.<#=this.Pluralize(properClassName)#>.GetAll();
+    }
+    catch (Exception ex)
+    {
+        result = new BindingList<<#=properClassName#>>();
+
+        OnExceptionRaised(ex);
+    }
+
+    return result;
+}
+
+/// <summary>
+/// Retrieves a record with primary key value <paramref name="id" /> from the data
+/// source.
+/// </summary>
+/// <param name="id">Value of the primary key to look up.</param>
+/// <returns>
+/// Reference to the instance of
+/// <see cref="T:<#=this.BusinessLayerNameSpace#>.<#=properClassName#>" /> containing
+/// the requested data, or a null reference if the requested record cannot be
+/// located.
+/// </returns>
+public <#=properClassName#> GetById(int id)
+{
+    <#=properClassName#> entity;
+
+    if (id < 1)
+        return null;
+
+    try
+    {
+        entity = UnitOfWork.<#=this.Pluralize(properClassName)#>.GetById(id);
+    }
+    catch(Exception ex)
+    {
+        entity = null;
+
+        OnExceptionRaised(ex);
+    }
+
+    return entity;
+}
+<#+ PopIndent(); #>
+}
+<#+ PopIndent(); #>
+}
+<#+ CreateFile(properClassName + "Service.cs"); #>
+            <#+
+        }
+    }
+#>
+<#+
+    public void GenerateDataServiceManagerFromPOCOs(Project project, string targetNamespace, List<string> listOfPocoNames,     
+        string efContext)
+    {
+#>
+<#=GenerateFileHeader()#>
+
+using System;
+<#+
+    /* OKAY, so we are tracking that a UnitOfWork exists to share the DbContext between several repositories and
+        also to manage access to the underlying data source.  We also have a lot of Services.  These are all Singletons.
+        Generally, there is one Service per table in our database.  As the number of tables in the database grow, so too
+        will the number of Services.  The DataServiceManager is a class that is generated in order to talk to all these
+        Services as a group.  Such as to initialize them all with the proper connection string, or to save ALL pending 
+        changes to the db, across ALL the tables, etc.
+    */
+#>
+namespace <#=this.BusinessLayerNameSpace#>
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+/// Manages all the data services for the 
+/// <#=this.GetDataSourceName(efContext)#> data source as a group.
+/// </summary>
+public partial class <#=this.GetDataSourceName(efContext)#>ServiceManager
+{
+<#+ PushIndent("    "); #>
+/// <summary>
+/// Empty, static constructor to prohibit direct allocation of this class.
+/// </summary>
+static <#=this.GetDataSourceName(efContext)#>ServiceManager() { }
+
+/// <summary>
+/// Empty, protected constructor to prohibit direct allocation of this class.
+/// </summary>
+protected <#=this.GetDataSourceName(efContext)#>ServiceManager() { }
+
+/// <summary>Gets a reference to the one and only instance of <see cref="T:<#=this.BusinessLayerNameSpace#>.<#=this.GetDataSourceName(efContext)#>ServiceManager" />.</summary>
+public static <#=this.GetDataSourceName(efContext)#>ServiceManager Instance { get; } =
+    new <#=this.GetDataSourceName(efContext)#>ServiceManager();
+
+/// <summary>Installs a <see cref="T:System.EventHandler" /> delegate to be attached to the <see cref="E:<#=this.BusinessLayerNameSpace#>.<#=this.GetDataSourceName(efContext)#>ServiceBase.ExceptionRaised" /> event for each of the data service objects managed by this object.</summary>
+/// <param name="exceptionRaisedEventHandler">(Optional.) A <see cref="T:System.EventHandler" /> delegate to be attached to the
+/// <see cref="E:<#=this.BusinessLayerNameSpace#>.<#=this.GetDataSourceName(efContext)#>ServiceBase.ExceptionRaised" /> event for each of the data service objects managed by this object.</param>
+private void InstallExceptionRaisedEventHandler(
+    Action<Exception> exceptionRaisedEventHandler = null)
+{
+<#+ PushIndent("    "); #>
+if (exceptionRaisedEventHandler == null) return;
+
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+<#=serviceName#>.Instance.ExceptionRaised -= 
+    exceptionRaisedEventHandler;
+<#=serviceName#>.Instance.ExceptionRaised += 
+    exceptionRaisedEventHandler;
+
+<#+
+        }
+#>
+<#+ PopIndent(); #>
+}
+
+/// <summary>Installs a <see cref="T:System.Action{System.Int32}" /> delegate to be attached to the
+/// <see
+///     cref="E:<#=this.BusinessLayerNameSpace#>.<#=this.GetDataSourceName(efContext)#>ServiceBase.ChangesSaved" />
+/// event for each of the data service objects managed by this object.</summary>
+/// <param name="changesSavedEventHandler">(Optional.) <see cref="T:System.Action{System.Int32}" /> delegate to be attached to the
+/// <see
+///     cref="E:<#=this.BusinessLayerNameSpace#>.<#=this.GetDataSourceName(efContext)#>ServiceBase.ChangesSaved" />
+/// event for each of the data service objects managed by this object.</param>
+private void InstallChangesSavedEventHandler(
+    Action<int> changesSavedEventHandler = null)
+{
+<#+ PushIndent("    "); #>
+if (changesSavedEventHandler == null) return;
+
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+<#=serviceName#>.Instance.ChangesSaved -= 
+    changesSavedEventHandler;
+<#=serviceName#>.Instance.ChangesSaved += 
+    changesSavedEventHandler;
+
+<#+
+        }
+#>
+<#+ PopIndent(); #>
+}
+
+/// <summary>Saves all pending changes to the underlying data source.</summary>
+/// <returns>Total number of rows affected across all transactions; or -1 if an error occurred.  If an error occurs, the offending service will raise an event that contains the exception information.</returns>
+public int SaveAll()
+{
+<#+ PushIndent("    "); #>
+// ReSharper disable once TooWideLocalVariableScope
+var totalRowsAffected = 0;
+var rowsAffectedByCurrentSave = 0;
+
+try
+{
+<#+ PushIndent("    "); #>
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+rowsAffectedByCurrentSave = <#=serviceName#>.Instance.Save();
+if (rowsAffectedByCurrentSave > 0)
+    totalRowsAffected += rowsAffectedByCurrentSave;
+    
+<#+
+        }
+#>
+<#+ PopIndent(); #>
+}
+catch(Exception)
+{
+    totalRowsAffected = -1;
+}
+
+return totalRowsAffected;
+
+<#+ PopIndent(); #>
+}
+
+
+/// <summary>
+/// Initializes all data services using the default underlying data source.
+/// </summary>
+/// <param name="connectionString">
+/// (Optional.) If supplied, is the connection string to utilize to connect
+/// to the underlying data source.  If no value is supplied for this parameter,
+/// the default data source as configured in App.config is utilized.
+/// </param>
+/// <param name="exceptionRaisedEventHandler">
+/// (Optional.) If specified, reference to a method that serves as a handler for
+/// exceptions raised by any one of the services.
+/// </param>
+public void InitializeAll(string connectionString = "",
+    Action<Exception> exceptionRaisedEventHandler = null)
+{
+<#+ PushIndent("    "); #>
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+<#+ PushIndent("    "); #>
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+<#=serviceName#>.Instance.DoInitialize();
+<#+
+        }
+#>
+<#+ PopIndent(); #>
+}
+else
+{
+<#+ PushIndent("    "); #>
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+<#=serviceName#>.Instance.DoInitialize(connectionString);
+<#+
+        }
+#>
+<#+ PopIndent(); #>
+}
+
+InstallExceptionRaisedEventHandler(exceptionRaisedEventHandler);
+<#+ PopIndent(); #>
+}
+
+/// <summary>
+/// Initializes all data services using the connection to the underlying data source provided by the unit-of-work object referenced by <paramref name="unitOfWorkObject" />.
+/// </summary>
+/// <param name="unitOfWorkObject">
+/// Reference to an instance of an object that implements
+/// <see
+///     cref="T:<#=this.BusinessLayerNameSpace#>.I<#=this.GetDataSourceName(efContext)#>UnitOfWork" />
+/// having the proper connection to the underlying data source.
+/// </param>
+/// <param name="exceptionRaisedEventHandler">
+/// (Optional.) If specified, reference to a method that serves as a handler for
+/// exceptions raised by any one of the services.
+/// </param>
+public void InitializeAll(I<#=this.GetDataSourceName(efContext)#>UnitOfWork unitOfWorkObject,
+    Action<Exception> exceptionRaisedEventHandler = null)
+{
+<#+ PushIndent("    "); #>
+<#+
+        foreach(string className in listOfPocoNames)
+        {
+            var properClassName = GetProperClassName(className);
+            var serviceName = properClassName + "Service";
+#>
+<#=serviceName#>.Instance.DoInitialize(unitOfWorkObject);
+<#+
+        }
+#>
+
+InstallExceptionRaisedEventHandler(exceptionRaisedEventHandler);
+<#+ PopIndent(); #>
+}
+
+/// <summary>
+/// Gets a value that indicates whether there are changes pending to be
+/// saved to the underlying data source.
+/// </summary>
+/// <remarks>
+/// This property returns the value of a logical OR operation performed
+/// against all the data services that this class manages.
+/// </remarks>
+public bool HasChanges =>
+<#+ PushIndent("    "); #>
+<#+
+        for(int i = 0;i < listOfPocoNames.Count - 1;i++)
+        {
+            var properClassName = GetProperClassName(
+                listOfPocoNames[i]
+            );
+            var serviceName = string.Format("{0}Service", properClassName);
+#>
+<#=serviceName#>.Instance.HasChanges
+    || <#+
+        }
+
+        var finalProperClassName = GetProperClassName(
+            listOfPocoNames.Last()
+        );
+        var finalServiceName = string.Format("{0}Service", finalProperClassName);
+#>
+<#=finalServiceName#>.Instance.HasChanges;
+<#+ PopIndent(); #>
+<#+ PopIndent(); #>
+}
+<#+ PopIndent(); #>
+}
+<#+
+        CreateFile(string.Format("{0}ServiceManager.cs", this.GetDataSourceName(efContext)));
+    }
+
+    /// <summary>
+    /// Generates a header comment for the file so that users of the file know that it's generated from a template.
+    /// </summary>
+    public string GenerateFileHeader() 
+    {
+        return "//------------------------------------------------------------------------------\r\n// <auto-generated>\r\n//     This code was generated from a template.\r\n//\r\n//     Manual changes to this file may cause unexpected behavior in your application.\r\n//     Manual changes to this file will be overwritten if the code is regenerated.\r\n// </auto-generated>\r\n//------------------------------------------------------------------------------";
+    }
+   
+    /// <summary>
+    /// Gets or sets a reference to the currently-active project in the integrated development environment (IDE).
+    /// </summary>
+    private Project ActiveProject { get; set; }
+
+    /// <summary>
+    /// Gets or sets a reference to the currently-active solution in the integrated development environment (IDE).
+    /// </summary>
+    private Solution ActiveSolution { get; set; }
+
+    /// <summary>
+    /// Gets or sets a reference to the top-level object in the Visual Studio automation object model.
+    /// </summary>
+    private DTE DTE { get; set; }
+
+    /// <summary>
+    /// Gets a string that contains the C# namespace name for the business layer.
+    /// </summary>
+    /// <remarks>
+    /// The business layer is the tier of your solution that contains classes generated from this T4 template.
+    /// </remarks>
+    private string BusinessLayerNameSpace {
+        get {
+            return ActiveProject == null ? string.Empty : string.Format(
+                "{0}.BusinessLayer", ActiveProject.Name
+                );
+        }  
+    }
+
+    /// <summary>
+    /// Gets a string that contains the C# namespace name for the data-binding layer.
+    /// </summary>
+    /// <remarks>
+    /// The data-binding layer is where we implement useful classes that are utilized by
+    /// Windwos Forms for data-binding.
+    /// </remarks>
+    private string DataBindingLayerNameSpace {
+        get {
+            return ActiveProject == null ? string.Empty : string.Format(
+                "{0}.DataBinding", ActiveProject.Name
+                );
+        }  
+    }
+
+
+    /// <summary>
+    /// Interrogates the Visual Studio object model to locate references to
+    /// the currently-active Solution and Project.
+    /// </summary>
+    public void InitializeActiveProjectAndSolution()
+    {
+        IServiceProvider serviceProvider = (IServiceProvider)this.Host;
+        this.DTE = serviceProvider.GetService(typeof(DTE)) as DTE; 
+        ActiveSolution = this.DTE.Solution;
+        ActiveProject = GetActiveProject();     
+    }
+
+    //Generating Seperate Files
+    public void ProcessContent(string outputFileName, string content)
+    {
+        if (string.IsNullOrWhiteSpace(outputFileName)) throw new ArgumentNullException(nameof(outputFileName));
+        if (string.IsNullOrWhiteSpace(content)) throw new ArgumentNullException(nameof(content));
+
+        var templateDirectory = Path.GetDirectoryName(Host.TemplateFile);
+        var outputFilePath = Path.Combine(templateDirectory, outputFileName);
+        var outputDirectoryPath = Path.GetDirectoryName(outputFilePath);        
+
+        if(!Directory.Exists(outputDirectoryPath))
+            Directory.CreateDirectory(outputDirectoryPath);
+
+        if (File.Exists(outputFilePath))    // always overwrite existing output
+            File.Delete(outputFilePath);
+
+        File.WriteAllText(outputFilePath, content);
+
+        IServiceProvider hostServiceProvider = (IServiceProvider)Host;
+        EnvDTE.DTE dte = (EnvDTE.DTE)hostServiceProvider.GetService(typeof(EnvDTE.DTE));
+        ProjectItem containingProjectItem = dte.Solution.FindProjectItem(Host.TemplateFile);
+        containingProjectItem.ProjectItems.AddFromFile(outputFilePath);
+        
+    }
+
+    public string GetDataSourceName(string efContext)
+    {
+        if (string.IsNullOrWhiteSpace(efContext)) throw new ArgumentNullException(nameof(efContext));
+
+        return efContext
+            .Replace("Entities", "")
+            .Replace("DbContext", "")
+            .Replace("Db", "")
+            .Replace("Context", "");
+    }
+
+    public void CreateFile(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentNullException(nameof(fileName));
+
+        ProcessContent(fileName, this.GenerationEnvironment.ToString().TrimStart());
+        this.GenerationEnvironment.Remove(0, this.GenerationEnvironment.Length);
+    }
+
+    //Get Projects
+    public Project GetActiveProject()
+    {
+        Project activeProject = null;
+ 
+        Array activeSolutionProjects = this.DTE.ActiveSolutionProjects as Array;
+        if (activeSolutionProjects != null && activeSolutionProjects.Length > 0)
+            activeProject = activeSolutionProjects.GetValue(0) as Project;
+        return activeProject;
+    }
+
+    public List<CodeClass> FindClasses(Project project, string ns, string className) 
+    {
+        List<CodeClass> result = new List<CodeClass>();
+        FindClasses(project.CodeModel.CodeElements, className, ns, result, false);
+        return result;
+    }
+
+    private void FindClasses(CodeElements elements, string className, string searchNamespace, List<CodeClass> result, bool isNamespaceOk) 
+    {
+        if (elements == null) return;
+        foreach (CodeElement element in elements) 
+        {
+            if (element is CodeNamespace) 
+            {
+                CodeNamespace ns = element as CodeNamespace;
+                if (ns != null) 
+                {
+                    if (ns.FullName == searchNamespace)
+                        FindClasses(ns.Members, className, searchNamespace, result, true);
+                    else
+                        FindClasses(ns.Members, className, searchNamespace, result, false);
+                }
+            } 
+            else if (element is CodeClass && isNamespaceOk) 
+            {
+                CodeClass c = element as CodeClass;
+                if (c != null) 
+                {
+                    if (c.FullName.Contains(className))
+                        result.Add(c);
+
+                    FindClasses(c.Members, className, searchNamespace, result, true);
+                }
+            }
+        }
+    }
+        
+    //Naming
+    public string GetProperClassName(string className)
+    {
+        string returnString = className;
+        returnString = returnString.Replace(" ", "_");
+        returnString = returnString.Replace("_", " ");
+        //TextInfo ti = CultureInfo.CurrentCulture.TextInfo;  
+        //returnString = ti.ToTitleCase(returnString);
+        returnString = returnString.Replace(" ", "");
+        return returnString;
+    }
+
+    private static string CharToUpper(string input, int position)
+    {
+        return input.First().ToString().ToUpper() + input.Substring(position+1);
+    }
+#>

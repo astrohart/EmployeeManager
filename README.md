@@ -25,6 +25,8 @@ My emphasis for this particular project was producing the `EmployeeManager.Busin
 * Very naive thread syncrhonization
 * No support for database transactions or concurrency (beyond the default)
 * Only handles Microsoft SQL Server database (no SQLite, Oracle PL/SQL, PostgreSQL etc)
+* No WinForm design patterns -- such as Model/View/Presenter, Observer, or Event Aggregator -- are used in the Form code (the `.tt` generated code does use, e.g., Repository/Unit of Work pattern).
+   * (It should be noted: The WinForm is really just a bare-bones app to show how to interface to a database)
 
 The `EmployeeManager.Databinding.tt` file was built using the [walkthrough posted here](https://docs.microsoft.com/en-us/ef/ef6/fundamentals/databinding/winforms).  It simply generates the class in question.  It's a way to just drop-in the code.
 

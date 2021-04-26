@@ -1130,7 +1130,6 @@ private static void ResetDiagnosticProperties()
 
 using System;
 using System.ComponentModel;
-using System.ComponentModel;
 using System.Data.Entity;
 using <#=        targetNamespace #>;
 

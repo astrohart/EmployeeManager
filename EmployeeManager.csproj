@@ -186,9 +186,9 @@
       <LastGenOutput>Employees.Designer.cs</LastGenOutput>
       <CustomToolNamespace>EmployeeManager.Data</CustomToolNamespace>
     </EntityDeploy>
-    <None Include="deploy_db.bat">
+    <Content Include="deploy_db.bat">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
     <None Include="packages.config" />
     <None Include="Properties\DataSources\EmployeeManager.Data.Employee.datasource" />
     <None Include="Properties\DataSources\EmployeeManager.Data.EmployeeType.datasource" />
@@ -268,4 +268,8 @@
     <Error Condition="!Exists('packages\EntityFramework.6.4.4\build\EntityFramework.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\EntityFramework.6.4.4\build\EntityFramework.targets'))" />
   </Target>
   <Import Project="packages\EntityFramework.6.4.4\build\EntityFramework.targets" Condition="Exists('packages\EntityFramework.6.4.4\build\EntityFramework.targets')" />
+  <PropertyGroup>
+    <PostBuildEvent>call "$(OutDir)deploy_db.bat"
+exit /b 0</PostBuildEvent>
+  </PropertyGroup>
 </Project>

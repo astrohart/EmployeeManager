@@ -81,9 +81,9 @@ namespace EmployeeManager
             // ASSUMING that our deploy_db.bat script copies our .mdf and .ldf files
             // to %PROGRAMDATA%\xyLOGIX, LLC, we need to switch the data directory in
             // the app.config to be there
-            var appDataDir = Environment
-                .ExpandEnvironmentVariables(@"%PROGRAMDATA%\xyLOGIX, LLC")
-                .ToUpperInvariant();
+            var appDataDir = Environment.ExpandEnvironmentVariables(
+                @"%PROGRAMDATA%\xyLOGIX, LLC\EmployeeManager\Data"
+            );
 
             try
             {
